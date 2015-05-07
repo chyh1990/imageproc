@@ -105,6 +105,9 @@ define_colors! {
     Rgba, 4, true, "RGBA", #[doc = "RGB colors + alpha channel"];
 }
 
+pub trait GenericImage {
+    type Pixel: Pixel;
+}
 
 #[derive(Debug)]
 pub struct Image<T: Pixel> {
@@ -114,8 +117,12 @@ pub struct Image<T: Pixel> {
     data: Vec<T>
 }
 
+impl<T: Pixel> GenericImage for Image<T> {
+    type Pixel = T;
+}
+
 impl<T: Pixel> Image<T> {
-    fn new(width: u32, height: u32) -> Image<T> {
+    pub fn new(width: u32, height: u32) -> Image<T> {
         // fast allocation without initization
         let len = (width as usize) * (height as usize);
         let mut data: Vec<T> = Vec::with_capacity(len);
@@ -128,7 +135,7 @@ impl<T: Pixel> Image<T> {
         }
     }
 
-    fn from_raw(data: &[u8], width: u32, height: u32, stride: u32)
+    pub fn from_raw(data: &[u8], width: u32, height: u32, stride: u32)
         -> Result<Image<T>, ImageError> {
             if stride < width {
                 return Err(ImageError::OutOfMemoryError);
@@ -136,6 +143,7 @@ impl<T: Pixel> Image<T> {
             match (height * stride * (T::bits_per_pixel() as u32 / 8) ) as usize <= data.len() {
                 true => {
                 let data: Vec<T> = Vec::with_capacity((height * width) as usize);
+                // TODO(chenyh): copy data
                 Ok(Image {
                     w: width,
                     h: height,
@@ -147,39 +155,62 @@ impl<T: Pixel> Image<T> {
             }
     }
 
+    #[inline]
+    pub fn width(&self) -> u32 { self.w }
+
+    #[inline]
+    pub fn height(&self) -> u32 { self.h }
+
+    #[inline]
+    pub fn pitch(&self) -> u32 { self.stride * (self.bits_per_pixel() / 8) as u32 }
+
     #[inline(always)]
-    fn pixels(&self) -> &Vec<T> {
+    pub fn pixels(&self) -> &[T] {
         &self.data
     }
 
     #[inline(always)]
-    fn pixels_mut(&mut self) -> &mut Vec<T> {
+    pub fn pixels_mut(&mut self) -> &mut [T] {
         &mut self.data
     }
 
-    fn raw(&self) -> &[T::Subpixel] {
+    pub fn raw(&self) -> &[T::Subpixel] {
         let raw_len = self.bytes_per_row() * self.h as usize;
         unsafe { slice::from_raw_parts(self.data.as_ptr() as *const T::Subpixel, raw_len) }
     }
 
-    fn raw_mut(&mut self) -> &mut [T::Subpixel] {
+    pub fn raw_mut(&mut self) -> &mut [T::Subpixel] {
         let raw_len = self.bytes_per_row() * self.h as usize;
         unsafe { slice::from_raw_parts_mut(self.data.as_mut_ptr() as *mut T::Subpixel, raw_len) }
     }
 
     #[inline(always)]
-    fn channels(&self) -> u8 {
+    pub fn channels(&self) -> u8 {
         T::channels()
     }
 
     #[inline(always)]
-    fn bits_per_pixel(&self) -> u8 {
+    pub fn bits_per_pixel(&self) -> u8 {
         T::bits_per_pixel()
     }
 
     #[inline(always)]
-    fn bytes_per_row(&self) -> usize {
+    fn has_alpha(&self) -> bool {
+        T::has_alpha()
+    }
+
+    #[inline(always)]
+    pub fn bytes_per_row(&self) -> usize {
         (self.stride as usize) * (T::bits_per_pixel() / 8) as usize
+    }
+
+    #[inline(always)]
+    pub fn row(&self, r: u32) -> &[T] {
+        if r >= self.h {
+            panic!("height out_of_boundary");
+        }
+        let start = r * self.stride;
+        &self.data[r as usize .. (r + self.stride) as usize]
     }
 
     fn fill(&mut self, v: &T) {
@@ -191,6 +222,12 @@ impl<T: Pixel> Image<T> {
     fn zero(&mut self) {
         self.fill(&T::zero())
     }
+}
+
+impl<T: Pixel> Drop for Image<T> {
+        fn drop(&mut self) {
+            self.data.clear();
+        }
 }
 
 pub type ImageBGRA = Image<Bgra<u8>>;
@@ -217,6 +254,7 @@ mod test {
         assert_eq!(img.bits_per_pixel(), 4 * 8);
         assert_eq!(img.pixels().len(), 100 * 200);
         assert_eq!(img.raw().len(), 100 * 200 * 4);
+        assert_eq!(img.pitch(), 100 * 4);
     }
 }
 

@@ -6,6 +6,7 @@ extern crate libc;
 
 mod traits;
 mod image;
+mod imageio;
 
 #[test]
 fn it_works() {
