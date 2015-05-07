@@ -1,0 +1,9 @@
+[package]
+name = "imageproc"
+version = "0.1.0"
+authors = ["Yuheng Chen <yuhengchen@sensetime.com>"]
+build = "build.rs"
+
+[dependencies]
+num  = "*"
+libc  = "*"
