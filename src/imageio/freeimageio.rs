@@ -161,7 +161,7 @@ impl ImageIO<ImageBGRA> for FreeImageIO {
             return Err(ImageError::OutOfMemoryError);
         }
 
-        let w = unsafe { FreeImage_GetWidth(p) };
+        // let w = unsafe { FreeImage_GetWidth(p) };
         let h = unsafe { FreeImage_GetHeight(p) };
         let pitch = unsafe { FreeImage_GetPitch(p) };
 

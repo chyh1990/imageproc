@@ -15,7 +15,7 @@ pub enum ImageError {
 
 #[derive(PartialEq, Eq, Clone, Debug, Copy, Hash)]
 #[repr(C, packed)]
-struct Color<T: Primitive + Default> {
+pub struct Color<T: Primitive + Default> {
     b: T,
     g: T,
     r: T,
@@ -259,12 +259,12 @@ impl<T: Pixel> Image<T> {
     #[inline(always)]
     pub fn row(&self, r: u32) -> &[T] {
         let start = r * self.stride;
-        &self.data[r as usize .. (r + self.stride) as usize]
+        &self.data[start as usize .. (start + self.stride) as usize]
     }
 
     pub fn row_mut(&mut self, r: u32) -> &mut [T] {
         let start = r * self.stride;
-        &mut self.data[r as usize .. (r + self.stride) as usize]
+        &mut self.data[start as usize .. (start + self.stride) as usize]
     }
 
     pub fn fill(&mut self, v: &T) {

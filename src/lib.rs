@@ -1,4 +1,5 @@
 #![warn(unused_qualifications)]
+#![allow(dead_code)]
 #![deny(missing_copy_implementations)]
 
 extern crate num;
@@ -8,6 +9,8 @@ mod traits;
 mod image;
 mod imageio;
 mod convert;
+
+mod geo;
 
 #[test]
 fn it_works() {

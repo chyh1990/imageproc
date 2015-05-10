@@ -2,11 +2,12 @@
 
 // Note copied from the stdlib under MIT license
 
+use std::fmt::Display;
 use num::{ Bounded, Num, NumCast };
 
 
 /// Primitive trait from old stdlib, added max_value
-pub trait Primitive: Copy + NumCast + Num + PartialOrd<Self> + Clone + Bounded {
+pub trait Primitive: Copy + NumCast + Num + PartialOrd<Self> + Clone + Bounded + Display {
 }
 
 impl Primitive for usize {
