@@ -3,7 +3,8 @@ extern crate libc;
 use std::ffi::CString;
 use std::path::Path;
 use std::ptr;
-use self::libc::{c_int, c_void, c_char, c_uchar};
+use self::libc::{c_int, c_uint, c_void, c_char, c_uchar};
+use std::sync::{Once, ONCE_INIT};
 
 use imageio::ImageIO;
 use image::{ImageBGRA, ImageError};
@@ -54,12 +55,17 @@ enum ImageFormat {
 
 const JPEG_EXIFROTATE: c_int = 0x0008;
 
-#[link(name = "freeimage-3.17.0")]
+#[link(name = "freeimage", kind = "static")]
 extern {
-    fn FreeImage_Load(fif :ImageFormat, filename: *const c_char, flag: c_int) -> *mut c_void;
+    fn FreeImage_Initialise(load_local_only: c_int);
+    fn FreeImage_DeInitialise();
+    fn FreeImage_Allocate(width: c_int, height: c_int, bpp: c_int, red_mask: c_uint, green_mask: c_uint, blue_mask: c_uint) -> *mut c_void;
+    fn FreeImage_Load(fif: ImageFormat, filename: *const c_char, flag: c_int) -> *mut c_void;
+    fn FreeImage_Save(fif: ImageFormat, dib: *mut c_void, filename: *const c_char, flags: c_int) -> c_int;
     fn FreeImage_Unload(dib: *mut c_void);
 
     fn FreeImage_GetFileType(filename: *const c_char, size: c_int) -> ImageFormat;
+    fn FreeImage_GetFIFFromFilename(filename: *const c_char) -> ImageFormat;
 
     fn FreeImage_GetWidth(dib: *mut c_void) -> u32;
     fn FreeImage_GetHeight(dib: *mut c_void) -> u32;
@@ -69,13 +75,24 @@ extern {
 
     fn FreeImage_ConvertToGreyscale(dib: *mut c_void) -> *mut c_void;
     fn FreeImage_ConvertTo32Bits(dib: *mut c_void) -> *mut c_void;
+    fn FreeImage_ConvertTo24Bits(dib: *mut c_void) -> *mut c_void;
     fn FreeImage_Clone(dib: *mut c_void) -> *mut c_void;
 }
+
+fn init() {
+    static LIBSTART: Once = ONCE_INIT;
+    LIBSTART.call_once(|| {
+        // XXX not unloaded
+        unsafe { FreeImage_Initialise(0); }
+    });
+}
+
 
 pub struct FreeImageIO;
 
 impl ImageIO<ImageBGRA> for FreeImageIO {
     fn from_path(path: &Path) -> Result<ImageBGRA, ImageError> {
+        init();
         let c_path = CString::new(path.to_str().unwrap()).unwrap();
         let format = unsafe { FreeImage_GetFileType(c_path.as_ptr(), 0) };
         if format == ImageFormat::FIF_UNKNOWN {
@@ -127,7 +144,67 @@ impl ImageIO<ImageBGRA> for FreeImageIO {
             unsafe { FreeImage_Unload(np) };
             Ok(image)
         }
+    }
 
+    fn save(path: &Path, image: &ImageBGRA) -> Result<(), ImageError> {
+        init();
+        let c_path = CString::new(path.to_str().unwrap()).unwrap();
+        let format = unsafe { FreeImage_GetFIFFromFilename(c_path.as_ptr()) };
+        if format == ImageFormat::FIF_UNKNOWN {
+            return Err(ImageError::UnknownImageFormat);
+        }
+
+        // XXX opt me
+        let p = unsafe { FreeImage_Allocate(image.width() as i32,
+            image.height() as i32, 32, 0, 0, 0) };
+        if p.is_null() {
+            return Err(ImageError::OutOfMemoryError);
+        }
+
+        let w = unsafe { FreeImage_GetWidth(p) };
+        let h = unsafe { FreeImage_GetHeight(p) };
+        let pitch = unsafe { FreeImage_GetPitch(p) };
+
+        {
+            let stride_src = image.pitch();
+            let src = image.raw();
+            let psrc = src.as_ptr();
+            let dptr = unsafe { FreeImage_GetBits(p) };
+            if dptr.is_null() {
+                panic!("No image data!");
+            }
+
+            unsafe {
+                let dptr_end =  dptr.offset((pitch * (h - 1)) as isize);
+                for y in 0..h {
+                    // freeimage save image reversely
+                    ptr::copy(psrc.offset((y * stride_src) as isize),
+                    dptr_end.offset(-((y * pitch) as isize)),
+                    stride_src as usize);
+                }
+            }
+        }
+
+        let code;
+        unsafe { 
+            if format != ImageFormat::FIF_JPEG {
+                code = FreeImage_Save(format, p, c_path.as_ptr(), 0);
+                FreeImage_Unload(p);
+            } else {
+                let np = FreeImage_ConvertTo24Bits(p);
+                FreeImage_Unload(p);
+                if np.is_null() {
+                    return Err(ImageError::OutOfMemoryError);
+                }
+                code = FreeImage_Save(format, np, c_path.as_ptr(), 0);
+                FreeImage_Unload(np);
+            }
+        }
+        if code != 0 {
+            Ok(())
+        } else {
+            Err(ImageError::UnknownError)
+        }
     }
 }
 
@@ -146,6 +223,17 @@ mod test {
         assert_eq!(img.height(), 120);
         assert_eq!(img.bits_per_pixel(), 32);
         assert_eq!(img.channels(), 4);
+    }
+
+    #[test]
+    fn test_save() {
+        let path = Path::new("./tests/cat.jpg");
+        let img = FreeImageIO::from_path(&path).unwrap();
+        let target = Path::new("/tmp/test-out.png");
+        FreeImageIO::save(&target, &img).unwrap();
+
+        let target = Path::new("/tmp/test-out.jpg");
+        FreeImageIO::save(&target, &img).unwrap();
     }
 }
 

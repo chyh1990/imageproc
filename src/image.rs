@@ -1,7 +1,7 @@
-use std::iter::repeat;
 use std::slice;
 use std::default::Default;
 use std::marker::PhantomData;
+use std::ops::{Index, IndexMut};
 
 use traits::Primitive;
 
@@ -9,7 +9,41 @@ use traits::Primitive;
 pub enum ImageError {
     InvalidImage,
     OutOfMemoryError,
-    UnknownImageFormat
+    UnknownImageFormat,
+    UnknownError,
+}
+
+#[derive(PartialEq, Eq, Clone, Debug, Copy, Hash)]
+#[repr(C, packed)]
+struct Color<T: Primitive + Default> {
+    b: T,
+    g: T,
+    r: T,
+    a: T
+}
+
+impl<T: Primitive + Default> Color<T> {
+    fn new(b: T, g: T, r: T, a: T) -> Color<T> {
+        Color {
+            b: b,
+            g: g,
+            r: r,
+            a: a,
+        }
+    }
+
+    fn from_gray(gray: T) -> Color<T> {
+        Color {
+            b: gray,
+            g: gray,
+            r: gray,
+            a: T::max_value()
+        }
+    }
+
+    fn is_gray(&self) -> bool {
+        (self.b == self.g) && (self.r == self.g)
+    }
 }
 
 /// A pixel object is usually not used standalone but as a view into an image buffer.
@@ -18,6 +52,7 @@ pub trait Pixel: Copy + Clone {
     type Subpixel: Primitive + Default;
 
     fn zero() -> Self;
+
     fn has_alpha() -> bool;
 
     /// Returns the number of channels of this pixel type.
@@ -52,6 +87,7 @@ $( // START Structure definitions
 pub struct $ident<T: Primitive + Default> { pub data: [T; $channels] }
 
 #[allow(non_snake_case, dead_code)]
+#[inline(always)]
 pub fn $ident<T: Primitive + Default>(data: [T; $channels]) -> $ident<T> {
         $ident {
                     data: data
@@ -91,6 +127,22 @@ impl<T: Primitive + Default> Pixel for $ident<T> {
     #[inline(always)]
     fn raw_mut(&mut self) -> &mut [T] {
         &mut self.data
+    }
+}
+
+impl<T: Primitive + Default> Index<usize> for $ident<T> {
+    type Output = T;
+
+    #[inline(always)]
+    fn index(&self, _index: usize) -> &T {
+        &self.data[_index]
+    }
+}
+
+impl<T: Primitive + Default> IndexMut<usize> for $ident<T> {
+    #[inline(always)]
+    fn index_mut(&mut self, _index: usize) -> &mut T {
+        &mut self.data[_index]
     }
 }
 
@@ -206,21 +258,33 @@ impl<T: Pixel> Image<T> {
 
     #[inline(always)]
     pub fn row(&self, r: u32) -> &[T] {
-        if r >= self.h {
-            panic!("height out_of_boundary");
-        }
         let start = r * self.stride;
         &self.data[r as usize .. (r + self.stride) as usize]
     }
 
-    fn fill(&mut self, v: &T) {
+    pub fn row_mut(&mut self, r: u32) -> &mut [T] {
+        let start = r * self.stride;
+        &mut self.data[r as usize .. (r + self.stride) as usize]
+    }
+
+    pub fn fill(&mut self, v: &T) {
         for p in self.data.iter_mut() {
             *p = *v;
         }
     }
 
-    fn zero(&mut self) {
+    pub fn zero(&mut self) {
         self.fill(&T::zero())
+    }
+
+    pub fn pixel_at(&self, x: u32, y: u32) -> &T {
+        let off = self.stride * y + x;
+        &self.data[off as usize]
+    }
+
+    fn pixel_mut_at(&mut self, x: u32, y: u32) -> &mut T {
+        let off = self.stride * y + x;
+        &mut self.data[off as usize]
     }
 }
 
@@ -256,5 +320,6 @@ mod test {
         assert_eq!(img.raw().len(), 100 * 200 * 4);
         assert_eq!(img.pitch(), 100 * 4);
     }
+
 }
 
