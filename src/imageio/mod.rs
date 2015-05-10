@@ -2,7 +2,6 @@ use std::path::Path;
 
 use image::{ImageBGRA, ImageError, GenericImage};
 
-pub mod freeimageio;
 
 pub trait ImageIO<T: GenericImage> {
     fn from_path(path: &Path) -> Result<T, ImageError>;
@@ -11,3 +10,5 @@ pub trait ImageIO<T: GenericImage> {
 }
 
 pub use self::freeimageio::FreeImageIO;
+
+pub mod freeimageio;

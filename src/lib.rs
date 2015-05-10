@@ -1,16 +1,15 @@
 #![warn(unused_qualifications)]
 #![allow(dead_code)]
-#![deny(missing_copy_implementations)]
 
 extern crate num;
 extern crate libc;
 
 mod traits;
-mod image;
-mod imageio;
-mod convert;
-
-mod geo;
+pub mod image;
+pub mod imageio;
+pub mod convert;
+pub mod transform;
+pub mod geo;
 
 #[test]
 fn it_works() {

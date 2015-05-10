@@ -1,4 +1,5 @@
 use std::slice;
+use num::NumCast;
 use std::default::Default;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
@@ -66,6 +67,9 @@ pub trait Pixel: Copy + Clone {
 
     /// Returns the components as a mutable slice
     fn raw_mut(&mut self) -> &mut [Self::Subpixel];
+
+    fn blend(self, other: Self, alpha: f32) -> Self;
+    fn blend4(self, b: Self, c: Self, d: Self, u: f32, v: f32) -> Self;
 }
 
 // originally from https://github.com/PistonDevelopers/image
@@ -87,7 +91,7 @@ $( // START Structure definitions
 pub struct $ident<T: Primitive + Default> { pub data: [T; $channels] }
 
 #[allow(non_snake_case, dead_code)]
-#[inline(always)]
+#[inline]
 pub fn $ident<T: Primitive + Default>(data: [T; $channels]) -> $ident<T> {
         $ident {
                     data: data
@@ -97,50 +101,80 @@ pub fn $ident<T: Primitive + Default>(data: [T; $channels]) -> $ident<T> {
 impl<T: Primitive + Default> Pixel for $ident<T> {
     type Subpixel = T;
 
-    #[inline(always)]
+    #[inline]
     fn zero() -> $ident<T> {
         $ident {
             data: [Default::default(); $channels]
         }
     }
 
-    #[inline(always)]
+    #[inline]
     fn channels() -> u8 {
         $channels
     }
 
-    #[inline(always)]
+    #[inline]
     fn bits_per_pixel() -> u8 {
         8 * $channels
     }
 
-    #[inline(always)]
+    #[inline]
     fn has_alpha() -> bool {
         $alpha
     }
 
-    #[inline(always)]
+    #[inline]
     fn raw(&self) -> &[T] {
         &self.data
     }
 
-    #[inline(always)]
+    #[inline]
     fn raw_mut(&mut self) -> &mut [T] {
         &mut self.data
+    }
+
+    #[inline]
+    fn blend(self, other: Self, alpha: f32) -> Self {
+        // OPTIMIZE
+        let mut t = self.data;
+        for i in 0..$channels {
+            t[i] = NumCast::from(t[i].to_f32().unwrap() * alpha
+                + other.data[i].to_f32().unwrap() * (1f32 - alpha)).unwrap();
+        }
+        $ident(t)
+    }
+
+    #[inline]
+    fn blend4(self, b: Self, c: Self, d: Self, u: f32, v: f32) -> Self {
+        let a0 = u * v;
+        let a1 = (1.0 - u) * v;
+        let a2 = u * (1.0 - v);
+        let a3 = (1.0 - u) * (1.0 - v);
+
+        let mut a = self.data;
+        for i in 0..$channels {
+            a[i] = NumCast::from(
+                a[i].to_f32().unwrap() * a0
+                + b[i].to_f32().unwrap() * a1
+                + c[i].to_f32().unwrap() * a2
+                + d[i].to_f32().unwrap() * a3
+                ).unwrap();
+        }
+        $ident(a)
     }
 }
 
 impl<T: Primitive + Default> Index<usize> for $ident<T> {
     type Output = T;
 
-    #[inline(always)]
+    #[inline]
     fn index(&self, _index: usize) -> &T {
         &self.data[_index]
     }
 }
 
 impl<T: Primitive + Default> IndexMut<usize> for $ident<T> {
-    #[inline(always)]
+    #[inline]
     fn index_mut(&mut self, _index: usize) -> &mut T {
         &mut self.data[_index]
     }
@@ -216,12 +250,12 @@ impl<T: Pixel> Image<T> {
     #[inline]
     pub fn pitch(&self) -> u32 { self.stride * (self.bits_per_pixel() / 8) as u32 }
 
-    #[inline(always)]
+    #[inline]
     pub fn pixels(&self) -> &[T] {
         &self.data
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn pixels_mut(&mut self) -> &mut [T] {
         &mut self.data
     }
@@ -236,27 +270,27 @@ impl<T: Pixel> Image<T> {
         unsafe { slice::from_raw_parts_mut(self.data.as_mut_ptr() as *mut T::Subpixel, raw_len) }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn channels(&self) -> u8 {
         T::channels()
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn bits_per_pixel(&self) -> u8 {
         T::bits_per_pixel()
     }
 
-    #[inline(always)]
+    #[inline]
     fn has_alpha(&self) -> bool {
         T::has_alpha()
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn bytes_per_row(&self) -> usize {
         (self.stride as usize) * (T::bits_per_pixel() / 8) as usize
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn row(&self, r: u32) -> &[T] {
         let start = r * self.stride;
         &self.data[start as usize .. (start + self.stride) as usize]

@@ -69,5 +69,12 @@ mod test {
         assert_eq!(*dst.pixel_at(2, 0), Gray([76]));
         assert_eq!(*dst.pixel_at(3, 0), Gray([255]));
     }
+
+    #[test]
+    fn test_convert() {
+        let mut src = ImageBGRA::new(2000,1000);
+        src.fill(&Bgra([100,100,100,255]));
+        let out = convert::<MapBGRA_Gray>(&src);
+    }
 }
 
