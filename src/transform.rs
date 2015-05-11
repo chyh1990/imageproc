@@ -1,4 +1,5 @@
 use image::*;
+use math::affine::Affine2D;
 
 #[inline(always)]
 fn clipped_round(x: f32, min: i32, max: i32) -> i32 {
@@ -76,14 +77,80 @@ pub fn resize_bilinear<T: Pixel>(src: &Image<T>, width: u32, height: u32) -> Ima
     dst
 }
 
+pub fn warp_perspective<T: Pixel>(src: &Image<T>, width: u32, height: u32, affine :&Affine2D, interp :bool) -> Image<T> {
+    let mut dst: Image<T> = Image::new(width, height);
+    for h in 0..height {
+        let pdst = dst.row_mut(h);
+        for w in 0..width {
+            let mut coord = affine.apply_inv([w as f32, h as f32, 1f32]);
+            let sx = coord[0] / coord[2];
+            let sy = coord[1] / coord[2];
+            if !interp {
+                let ix = sx.round() as i32;
+                let iy = sy.round() as i32;
+                if ix >= 0 && ix < src.width() as i32 
+                    && iy >= 0 && iy < src.height() as i32 {
+                    pdst[w as usize] = *src.pixel_at(ix as u32, iy as u32);
+                }
+            }
+        }
+    }
+    dst
+}
+
+pub fn flip_vertical<T: Pixel>(src: &Image<T>) -> Image<T> {
+    let mut dst = Image::new(src.width(), src.height());
+    for h in 0..src.height() {
+        for (a, b) in dst.row_mut(src.height() - h - 1).iter_mut().zip(src.row(h)) {
+            *a = *b;
+        }
+    }
+    dst
+}
+
+pub fn flip_horizontal<T: Pixel>(src: &Image<T>) -> Image<T> {
+    let mut dst = Image::new(src.width(), src.height());
+    for h in 0..src.height() {
+        for (a, b) in dst.row_mut(h).iter_mut().zip(src.row(h).iter().rev()) {
+            *a = *b;
+        }
+    }
+    dst
+}
+
+#[derive(Debug, Clone)]
+pub enum RotateType{
+    CW_0,
+    CW_90,
+    CW_180,
+    CW_270
+}
+
+fn rotate_cw90<T: Pixel>(src: &Image<T>) -> Image<T> {
+    let mut dst = Image::new(src.height(), src.width());
+    for h in 0..src.height() {
+        let psrc = dst.row(h);
+        for w in 0..src.width() {
+        }
+    }
+    dst
+}
+
+
+//fn rotate(src: &Image<T>, rtype: RotateType) -> Image<T> {
+//    match rtype {
+//        CW_0 => 
+//    }
+//}
 
 #[cfg(test)]
 mod test {
     use super::*;
     use std::path::Path;
-    use image::*;
     use imageio::ImageIO;
     use imageio::FreeImageIO;
+    use geo::*;
+    use math::affine::Affine2D;
 
     #[test]
     fn test_resize() {
@@ -101,6 +168,33 @@ mod test {
         assert_eq!(dst.height(), 400);
         let target = Path::new("/tmp/test-resize-out2.jpg");
         FreeImageIO::save(&target, &dst).unwrap();
+    }
+
+    #[test]
+    fn test_warp() {
+        let path = Path::new("./tests/cat.jpg");
+        let img = FreeImageIO::from_path(&path).unwrap();
+        let src = vec![Pointf::new(0f32, 0f32), Pointf::new(1f32, 0f32)];
+        let dst = vec![Pointf::new(0f32, 0f32), Pointf::new(1f32, 1f32)];
+
+        let aff = Affine2D::nonreflect_similarity_from_points(&src, &dst).unwrap();
+        let out = warp_perspective(&img, 200, 200, &aff, false);
+        let target = Path::new("/tmp/test-affine-out1.jpg");
+        FreeImageIO::save(&target, &out).unwrap();
+    }
+
+    #[test]
+    fn test_rotate() {
+        let path = Path::new("./tests/cat.jpg");
+        let img = FreeImageIO::from_path(&path).unwrap();
+
+        let out = flip_vertical(&img);
+        let target = Path::new("/tmp/test-rotate-out1.jpg");
+        FreeImageIO::save(&target, &out).unwrap();
+
+        let out = flip_horizontal(&img);
+        let target = Path::new("/tmp/test-rotate-out2.jpg");
+        FreeImageIO::save(&target, &out).unwrap();
     }
 }
 

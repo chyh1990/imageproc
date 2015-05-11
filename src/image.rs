@@ -5,10 +5,12 @@ use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
 use traits::Primitive;
+use geo::Rect;
 
 #[derive(Debug)]
 pub enum ImageError {
     InvalidImage,
+    OutOfRegion,
     OutOfMemoryError,
     UnknownImageFormat,
     UnknownError,
@@ -316,10 +318,13 @@ impl<T: Pixel> Image<T> {
         &self.data[off as usize]
     }
 
-    fn pixel_mut_at(&mut self, x: u32, y: u32) -> &mut T {
+    pub fn pixel_mut_at(&mut self, x: u32, y: u32) -> &mut T {
         let off = self.stride * y + x;
         &mut self.data[off as usize]
     }
+
+    //pub fn crop(&self, rect: &Rect) -> Result<Image<T>, ImageError> {
+    //}
 }
 
 impl<T: Pixel> Drop for Image<T> {
