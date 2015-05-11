@@ -333,9 +333,9 @@ impl<T: Pixel> Drop for Image<T> {
         }
 }
 
-pub type ImageBGRA = Image<Bgra<u8>>;
+pub type ImageBgra = Image<Bgra<u8>>;
 pub type ImageGray = Image<Gray<u8>>;
-pub type ImageBGR = Image<Bgr<u8>>;
+pub type ImageBgr = Image<Bgr<u8>>;
 pub type ImageGrayf = Image<Gray<f32>>;
 
 #[cfg(test)]
@@ -352,7 +352,7 @@ mod test {
 
     #[test]
     fn test_alloc() {
-        let img = ImageBGRA::new(100, 200);
+        let img = ImageBgra::new(100, 200);
         assert_eq!(img.channels(), 4);
         assert_eq!(img.bits_per_pixel(), 4 * 8);
         assert_eq!(img.pixels().len(), 100 * 200);

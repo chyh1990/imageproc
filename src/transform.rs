@@ -82,7 +82,7 @@ pub fn warp_perspective<T: Pixel>(src: &Image<T>, width: u32, height: u32, affin
     for h in 0..height {
         let pdst = dst.row_mut(h);
         for w in 0..width {
-            let mut coord = affine.apply_inv([w as f32, h as f32, 1f32]);
+            let coord = affine.apply_inv([w as f32, h as f32, 1f32]);
             let sx = coord[0] / coord[2];
             let sy = coord[1] / coord[2];
             if !interp {
@@ -147,6 +147,7 @@ fn rotate_cw90<T: Pixel>(src: &Image<T>) -> Image<T> {
 mod test {
     use super::*;
     use std::path::Path;
+    use image::ImageBgra;
     use imageio::ImageIO;
     use imageio::FreeImageIO;
     use geo::*;
@@ -155,7 +156,7 @@ mod test {
     #[test]
     fn test_resize() {
         let path = Path::new("./tests/cat.jpg");
-        let img = FreeImageIO::from_path(&path).unwrap();
+        let img: ImageBgra = FreeImageIO::from_path(&path).unwrap();
 
         let dst = resize_nearest(&img, 600, 400);
         assert_eq!(dst.width(), 600);
@@ -173,7 +174,7 @@ mod test {
     #[test]
     fn test_warp() {
         let path = Path::new("./tests/cat.jpg");
-        let img = FreeImageIO::from_path(&path).unwrap();
+        let img: ImageBgra = FreeImageIO::from_path(&path).unwrap();
         let src = vec![Pointf::new(0f32, 0f32), Pointf::new(1f32, 0f32)];
         let dst = vec![Pointf::new(0f32, 0f32), Pointf::new(1f32, 1f32)];
 
@@ -186,7 +187,7 @@ mod test {
     #[test]
     fn test_rotate() {
         let path = Path::new("./tests/cat.jpg");
-        let img = FreeImageIO::from_path(&path).unwrap();
+        let img: ImageBgra = FreeImageIO::from_path(&path).unwrap();
 
         let out = flip_vertical(&img);
         let target = Path::new("/tmp/test-rotate-out1.jpg");

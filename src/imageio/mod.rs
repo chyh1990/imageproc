@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use image::{ImageBGRA, ImageError, GenericImage};
+use image::{ImageBgra, ImageError, GenericImage};
 
 
 pub trait ImageIO<T: GenericImage> {

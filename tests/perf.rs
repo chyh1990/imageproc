@@ -11,7 +11,7 @@ use imageproc::image::*;
 fn main() {
     println!("start perf...");
 
-    let mut src = ImageBGRA::new(2000,1000);
+    let mut src = ImageBgra::new(2000,1000);
     src.fill(&Bgra([100,100,100,255]));
     let start = PreciseTime::now();
     for _ in 0..10 {
