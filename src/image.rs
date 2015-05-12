@@ -1,8 +1,9 @@
 use std::slice;
 use num::NumCast;
-use std::default::Default;
+use num::traits::Saturating;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
+use std::ops::{Add, Sub, Mul};
 
 use traits::Primitive;
 use geo::Rect;
@@ -18,14 +19,14 @@ pub enum ImageError {
 
 #[derive(PartialEq, Eq, Clone, Debug, Copy, Hash)]
 #[repr(C, packed)]
-pub struct Color<T: Primitive + Default> {
+pub struct Color<T: Primitive> {
     b: T,
     g: T,
     r: T,
     a: T
 }
 
-impl<T: Primitive + Default> Color<T> {
+impl<T: Primitive> Color<T> {
     fn new(b: T, g: T, r: T, a: T) -> Color<T> {
         Color {
             b: b,
@@ -52,7 +53,7 @@ impl<T: Primitive + Default> Color<T> {
 /// A pixel object is usually not used standalone but as a view into an image buffer.
 pub trait Pixel: Copy + Clone {
     /// The underlying subpixel type.
-    type Subpixel: Primitive + Default;
+    type Subpixel: Primitive;
 
     fn zero() -> Self;
 
@@ -90,23 +91,23 @@ $( // START Structure definitions
 #[derive(PartialEq, Eq, Clone, Debug, Copy, Hash)]
 #[repr(C, packed)]
 #[allow(missing_docs)]
-pub struct $ident<T: Primitive + Default> { pub data: [T; $channels] }
+pub struct $ident<T: Primitive> { pub data: [T; $channels] }
 
 #[allow(non_snake_case, dead_code)]
 #[inline]
-pub fn $ident<T: Primitive + Default>(data: [T; $channels]) -> $ident<T> {
+pub fn $ident<T: Primitive>(data: [T; $channels]) -> $ident<T> {
         $ident {
                     data: data
         }
 }
 
-impl<T: Primitive + Default> Pixel for $ident<T> {
+impl<T: Primitive> Pixel for $ident<T> {
     type Subpixel = T;
 
     #[inline]
     fn zero() -> $ident<T> {
         $ident {
-            data: [Default::default(); $channels]
+            data: [T::zero(); $channels]
         }
     }
 
@@ -166,7 +167,7 @@ impl<T: Primitive + Default> Pixel for $ident<T> {
     }
 }
 
-impl<T: Primitive + Default> Index<usize> for $ident<T> {
+impl<T: Primitive> Index<usize> for $ident<T> {
     type Output = T;
 
     #[inline]
@@ -175,10 +176,83 @@ impl<T: Primitive + Default> Index<usize> for $ident<T> {
     }
 }
 
-impl<T: Primitive + Default> IndexMut<usize> for $ident<T> {
+impl<T: Primitive> IndexMut<usize> for $ident<T> {
     #[inline]
     fn index_mut(&mut self, _index: usize) -> &mut T {
         &mut self.data[_index]
+    }
+}
+
+impl<T: Primitive> Add for $ident<T> {
+    type Output = $ident<T>;
+
+    #[inline]
+    fn add(self, other: $ident<T>) -> $ident<T> {
+        let mut m = [T::zero(); $channels];
+        for i in 0..$channels { m[i] = self.data[i] + other.data[i]; }
+        $ident(m)
+    }
+}
+
+impl<T: Primitive> Sub for $ident<T> {
+    type Output = $ident<T>;
+
+    #[inline]
+    fn sub(self, other: $ident<T>) -> $ident<T> {
+        let mut m = [T::zero(); $channels];
+        for i in 0..$channels { m[i] = self.data[i] - other.data[i]; }
+        $ident(m)
+    }
+}
+
+impl<T: Primitive> Mul for $ident<T> {
+    type Output = $ident<T>;
+
+    #[inline]
+    fn mul(self, other: $ident<T>) -> $ident<T> {
+        let mut m = [T::zero(); $channels];
+        for i in 0..$channels { m[i] = self.data[i] * other.data[i]; }
+        $ident(m)
+    }
+}
+
+// Pixel * scalar
+impl<T: Primitive, U: Primitive> Add<U> for $ident<T> {
+    type Output = $ident<U>;
+
+    #[inline]
+    fn add(self, other: U) -> $ident<U> {
+        let mut m = [U::zero(); $channels];
+        for i in 0..$channels {
+            m[i] = U::from(self.data[i]).unwrap() + other;
+        }
+        $ident(m)
+    }
+}
+
+impl<T: Primitive, U: Primitive> Sub<U> for $ident<T> {
+    type Output = $ident<U>;
+
+    #[inline]
+    fn sub(self, other: U) -> $ident<U> {
+        let mut m = [U::zero(); $channels];
+        for i in 0..$channels {
+            m[i] = U::from(self.data[i]).unwrap() - other;
+        }
+        $ident(m)
+    }
+}
+
+impl<T: Primitive, U: Primitive> Mul<U> for $ident<T> {
+    type Output = $ident<U>;
+
+    #[inline]
+    fn mul(self, other: U) -> $ident<U> {
+        let mut m = [U::zero(); $channels];
+        for i in 0..$channels {
+            m[i] = U::from(self.data[i]).unwrap() * other;
+        }
+        $ident(m)
     }
 }
 
@@ -192,6 +266,31 @@ define_colors! {
     Bgra, 4, true, "BGRA", #[doc = "BGR colors + alpha channel"];
     Rgba, 4, true, "RGBA", #[doc = "RGB colors + alpha channel"];
 }
+
+macro_rules! define_saturating(
+    ($t:ident) => (
+impl<T: Primitive + Saturating> Saturating for $t<T> {
+    #[inline]
+    fn saturating_add(self, other: $t<T>) -> $t<T> {
+        let mut m = self.data;
+        for i in 0..$t::<T>::channels() as usize {
+            m[i] = m[i].saturating_add(other.data[i]); }
+        $t(m)
+    }
+    #[inline]
+    fn saturating_sub(self, other: $t<T>) -> $t<T> {
+        let mut m = self.data;
+        for i in 0..$t::<T>::channels() as usize {
+            m[i] = m[i].saturating_sub(other.data[i]); }
+        $t(m)
+    }
+}
+);
+);
+
+define_saturating!(Gray);
+define_saturating!(Bgr);
+define_saturating!(Bgra);
 
 pub trait GenericImage {
     type Pixel: Pixel;
@@ -250,6 +349,9 @@ impl<T: Pixel> Image<T> {
     pub fn height(&self) -> u32 { self.h }
 
     #[inline]
+    pub fn stride(&self) -> u32 {self.stride }
+
+    #[inline]
     pub fn pitch(&self) -> u32 { self.stride * (self.bits_per_pixel() / 8) as u32 }
 
     #[inline]
@@ -298,6 +400,7 @@ impl<T: Pixel> Image<T> {
         &self.data[start as usize .. (start + self.stride) as usize]
     }
 
+    #[inline]
     pub fn row_mut(&mut self, r: u32) -> &mut [T] {
         let start = r * self.stride;
         &mut self.data[start as usize .. (start + self.stride) as usize]
@@ -336,7 +439,10 @@ impl<T: Pixel> Drop for Image<T> {
 pub type ImageBgra = Image<Bgra<u8>>;
 pub type ImageGray = Image<Gray<u8>>;
 pub type ImageBgr = Image<Bgr<u8>>;
+
 pub type ImageGrayf = Image<Gray<f32>>;
+pub type ImageBgrf = Image<Bgra<f32>>;
+pub type ImageBgraf = Image<Bgra<f32>>;
 
 #[cfg(test)]
 mod test {
