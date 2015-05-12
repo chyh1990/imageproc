@@ -1,17 +1,6 @@
 use image::*;
+use math::utils::*;
 use math::affine::Affine2D;
-
-#[inline(always)]
-fn clipped_round(x: f32, min: i32, max: i32) -> i32 {
-    let t = x.round() as i32;
-    if t < min {
-        return min;
-    }
-    if t > max {
-        return max;
-    }
-    t
-}
 
 pub fn resize_nearest<T: Pixel>(src: &Image<T>, width: u32, height: u32) -> Image<T> {
     let mut dst = Image::new(width, height);
@@ -92,6 +81,8 @@ pub fn warp_perspective<T: Pixel>(src: &Image<T>, width: u32, height: u32, affin
                     && iy >= 0 && iy < src.height() as i32 {
                     pdst[w as usize] = *src.pixel_at(ix as u32, iy as u32);
                 }
+            } else {
+                unimplemented!();
             }
         }
     }
@@ -131,6 +122,7 @@ fn rotate_cw90<T: Pixel>(src: &Image<T>) -> Image<T> {
     for h in 0..src.height() {
         let psrc = dst.row(h);
         for w in 0..src.width() {
+            unimplemented!();
         }
     }
     dst

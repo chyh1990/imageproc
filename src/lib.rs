@@ -12,6 +12,7 @@ pub mod convert;
 pub mod transform;
 pub mod geo;
 pub mod math;
+pub mod conv;
 
 #[test]
 fn it_works() {
