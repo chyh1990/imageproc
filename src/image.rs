@@ -1,6 +1,6 @@
 use std::slice;
 use num::NumCast;
-use num::traits::Saturating;
+use num::traits::{Saturating, Bounded};
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 use std::ops::{Add, Sub, Mul};
@@ -57,7 +57,7 @@ pub trait Pixel: Copy + Clone {
 
     fn zero() -> Self;
 
-    fn has_alpha() -> bool;
+    fn alpha() -> isize;
 
     /// Returns the number of channels of this pixel type.
     fn channels() -> u8;
@@ -122,9 +122,10 @@ impl<T: Primitive> Pixel for $ident<T> {
     }
 
     #[inline]
-    fn has_alpha() -> bool {
+    fn alpha() -> isize {
         $alpha
     }
+
 
     #[inline]
     fn raw(&self) -> &[T] {
@@ -261,10 +262,10 @@ impl<T: Primitive, U: Primitive> Mul<U> for $ident<T> {
 }
 
 define_colors! {
-    Bgr, 3, false, "BGR", #[doc = "RGB colors"];
-    Gray, 1, false, "Y", #[doc = "Grayscale colors"];
-    Bgra, 4, true, "BGRA", #[doc = "BGR colors + alpha channel"];
-    Rgba, 4, true, "RGBA", #[doc = "RGB colors + alpha channel"];
+    Bgr, 3, -1, "BGR", #[doc = "RGB colors"];
+    Gray, 1, -1, "Y", #[doc = "Grayscale colors"];
+    Bgra, 4, 3, "BGRA", #[doc = "BGR colors + alpha channel"];
+    Rgba, 4, 3, "RGBA", #[doc = "RGB colors + alpha channel"];
 }
 
 macro_rules! define_saturating(
@@ -349,6 +350,9 @@ impl<T: Pixel> Image<T> {
     pub fn height(&self) -> u32 { self.h }
 
     #[inline]
+    pub fn size(&self) -> (u32, u32) { (self.w, self.h) }
+
+    #[inline]
     pub fn stride(&self) -> u32 {self.stride }
 
     #[inline]
@@ -385,8 +389,13 @@ impl<T: Pixel> Image<T> {
     }
 
     #[inline]
-    fn has_alpha(&self) -> bool {
-        T::has_alpha()
+    fn alpha(&self) -> isize {
+        T::alpha()
+    }
+
+    #[inline]
+    fn has_alpha() -> bool {
+        T::alpha() >= 0
     }
 
     #[inline]
@@ -412,6 +421,20 @@ impl<T: Pixel> Image<T> {
         }
     }
 
+    pub fn fill_channel(&mut self, ch_idx: usize, v: T::Subpixel) {
+        assert!(ch_idx < T::channels() as usize);
+        for p in self.data.iter_mut() {
+            p.raw_mut()[ch_idx] = v;
+        }
+    }
+
+    pub fn set_alpha(&mut self) {
+        if Image::<T>::has_alpha() {
+            self.fill_channel(T::alpha() as usize,
+                T::Subpixel::max_value());
+        }
+    }
+
     pub fn zero(&mut self) {
         self.fill(&T::zero())
     }
@@ -426,6 +449,27 @@ impl<T: Pixel> Image<T> {
         &mut self.data[off as usize]
     }
 
+    pub fn iter(&self) -> ImageIterator<T> {
+        ImageIterator {
+            image: &self,
+            row: self.row(0),
+            y: 0,
+            x: 0
+        }
+    }
+
+    pub fn iter_mut(&mut self) -> ImageMutIterator<T> {
+        ImageMutIterator {
+            image: self,
+            y: 0,
+            x: 0
+        }
+    }
+
+    pub fn split_channel(&self) -> Vec(Image<Gray<T::Subpixel>>) {
+    }
+
+
     //pub fn crop(&self, rect: &Rect) -> Result<Image<T>, ImageError> {
     //}
 }
@@ -436,13 +480,91 @@ impl<T: Pixel> Drop for Image<T> {
         }
 }
 
-pub type ImageBgra = Image<Bgra<u8>>;
+impl<T: Pixel> Clone for Image<T> {
+    fn clone(&self) -> Image<T> {
+        Image {
+            w: self.w,
+            h: self.h,
+            stride: self.stride,
+            data: self.data.clone(),
+        }
+    }
+}
+
 pub type ImageGray = Image<Gray<u8>>;
 pub type ImageBgr = Image<Bgr<u8>>;
+pub type ImageBgra = Image<Bgra<u8>>;
 
 pub type ImageGrayf = Image<Gray<f32>>;
-pub type ImageBgrf = Image<Bgra<f32>>;
+pub type ImageBgrf = Image<Bgr<f32>>;
 pub type ImageBgraf = Image<Bgra<f32>>;
+
+pub struct ImageIterator<'a, P>
+    where P: Pixel + 'a,
+          P::Subpixel: 'a
+{
+    image: &'a Image<P>,
+    row: &'a [P],
+    y: u32,
+    x: u32
+}
+
+impl<'a, P> Iterator for ImageIterator<'a, P> 
+    where P: Pixel + 'a,
+          P::Subpixel: 'a,
+{
+    type Item = (u32, u32, &'a P);
+    #[inline]
+    fn next(&mut self) -> Option<(u32, u32, &'a P)> {
+        if self.x >= self.image.width() {
+            self.y += 1;
+            if self.y >= self.image.height() {
+                return None;
+            } else {
+                self.row = self.image.row(self.y);
+            }
+            self.x  = 0;
+        }
+        let (x, y) = (self.x, self.y);
+        self.x += 1;
+        Some((x, y, &self.row[x as usize]))
+    }
+}
+
+pub struct ImageMutIterator<'a, P>
+    where P: Pixel + 'a,
+          P::Subpixel: 'a
+{
+    image: &'a mut Image<P>,
+    y: u32,
+    x: u32
+}
+
+impl<'a, P> Iterator for ImageMutIterator<'a, P> 
+    where P: Pixel + 'a,
+          P::Subpixel: 'a,
+{
+    type Item = (u32, u32, &'a mut P);
+    #[inline]
+    fn next(&mut self) -> Option<(u32, u32, &'a mut P)> {
+        if self.x >= self.image.width() {
+            self.y += 1;
+            self.x  = 0;
+        }
+        if self.y >= self.image.height() {
+            return None;
+        }
+        let (x, y) = (self.x, self.y);
+        self.x += 1;
+        // TODO: implement this without `unsafe'
+        unsafe {
+            let t: *mut P = &mut self.image.row_mut(y)[x as usize];
+            Some((x, y, &mut *t))
+        }
+    }
+}
+
+
 
 #[cfg(test)]
 mod test {
@@ -464,6 +586,19 @@ mod test {
         assert_eq!(img.pixels().len(), 100 * 200);
         assert_eq!(img.raw().len(), 100 * 200 * 4);
         assert_eq!(img.pitch(), 100 * 4);
+    }
+
+    #[test]
+    fn test_iter() {
+        let mut img = ImageBgra::new(10, 5);
+        for (x, y, p) in img.iter_mut() {
+            *p = Bgra::<u8>([128, 128, 0, 0]);
+        }
+
+        for (x, y, p) in img.iter() {
+            assert_eq!(*p, Bgra::<u8>([128, 128, 0, 0]));
+        }
+
     }
 
 }
