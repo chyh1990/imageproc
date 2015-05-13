@@ -51,7 +51,7 @@ impl<T: Primitive> Color<T> {
 }
 
 /// A pixel object is usually not used standalone but as a view into an image buffer.
-pub trait Pixel: Copy + Clone {
+pub trait Pixel: Copy + Clone + Index<usize> {
     /// The underlying subpixel type.
     type Subpixel: Primitive;
 
@@ -439,16 +439,6 @@ impl<T: Pixel> Image<T> {
         self.fill(&T::zero())
     }
 
-    pub fn pixel_at(&self, x: u32, y: u32) -> &T {
-        let off = self.stride * y + x;
-        &self.data[off as usize]
-    }
-
-    pub fn pixel_mut_at(&mut self, x: u32, y: u32) -> &mut T {
-        let off = self.stride * y + x;
-        &mut self.data[off as usize]
-    }
-
     pub fn iter(&self) -> ImageIterator<T> {
         ImageIterator {
             image: &self,
@@ -465,11 +455,6 @@ impl<T: Pixel> Image<T> {
             x: 0
         }
     }
-
-    pub fn split_channel(&self) -> Vec(Image<Gray<T::Subpixel>>) {
-    }
-
-
     //pub fn crop(&self, rect: &Rect) -> Result<Image<T>, ImageError> {
     //}
 }
@@ -491,6 +476,27 @@ impl<T: Pixel> Clone for Image<T> {
     }
 }
 
+impl<T: Pixel> Index<(u32, u32)> for Image<T> {
+    type Output = T;
+
+    #[inline]
+    fn index(&self, _index: (u32, u32)) -> &T {
+        let (x, y) = _index;
+        let off = self.stride * y + x;
+        &self.data[off as usize]
+    }
+}
+
+impl<T: Pixel> IndexMut<(u32, u32)> for Image<T> {
+    #[inline]
+    fn index_mut(&mut self, _index: (u32, u32)) -> &mut T {
+        let (x, y) = _index;
+        let off = self.stride * y + x;
+        &mut self.data[off as usize]
+    }
+}
+
+
 pub type ImageGray = Image<Gray<u8>>;
 pub type ImageBgr = Image<Bgr<u8>>;
 pub type ImageBgra = Image<Bgra<u8>>;
@@ -501,6 +507,7 @@ pub type ImageBgraf = Image<Bgra<f32>>;
 
 pub struct ImageIterator<'a, P>
     where P: Pixel + 'a,
+          <P as Index<usize>>::Output: 'a,
           P::Subpixel: 'a
 {
     image: &'a Image<P>,
@@ -511,6 +518,7 @@ pub struct ImageIterator<'a, P>
 
 impl<'a, P> Iterator for ImageIterator<'a, P> 
     where P: Pixel + 'a,
+          <P as Index<usize>>::Output: 'a,
           P::Subpixel: 'a,
 {
     type Item = (u32, u32, &'a P);
@@ -533,6 +541,7 @@ impl<'a, P> Iterator for ImageIterator<'a, P>
 
 pub struct ImageMutIterator<'a, P>
     where P: Pixel + 'a,
+          <P as Index<usize>>::Output: 'a,
           P::Subpixel: 'a
 {
     image: &'a mut Image<P>,
@@ -542,6 +551,7 @@ pub struct ImageMutIterator<'a, P>
 
 impl<'a, P> Iterator for ImageMutIterator<'a, P> 
     where P: Pixel + 'a,
+          <P as Index<usize>>::Output: 'a,
           P::Subpixel: 'a,
 {
     type Item = (u32, u32, &'a mut P);
@@ -598,7 +608,14 @@ mod test {
         for (x, y, p) in img.iter() {
             assert_eq!(*p, Bgra::<u8>([128, 128, 0, 0]));
         }
+    }
 
+    #[test]
+    fn test_traits() {
+        let mut img = ImageBgra::new(10, 5);
+        for (x, y, p) in img.iter_mut() {
+            *p = *p + Bgra::<u8>([128, 128, 0, 0]);
+        }
     }
 
 }

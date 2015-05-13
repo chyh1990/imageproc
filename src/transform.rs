@@ -79,7 +79,7 @@ pub fn warp_perspective<T: Pixel>(src: &Image<T>, width: u32, height: u32, affin
                 let iy = sy.round() as i32;
                 if ix >= 0 && ix < src.width() as i32 
                     && iy >= 0 && iy < src.height() as i32 {
-                    pdst[w as usize] = *src.pixel_at(ix as u32, iy as u32);
+                    pdst[w as usize] = src[(ix as u32, iy as u32)];
                 }
             } else {
                 unimplemented!();

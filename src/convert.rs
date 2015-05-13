@@ -1,5 +1,7 @@
-#![allow(non_camel_case_types)]
+use std::ops::{Index, IndexMut};
+use num::traits::ToPrimitive;
 use image::*;
+use traits::Primitive;
 
 pub trait ColorMapper {
     type SrcType: Pixel;
@@ -60,6 +62,17 @@ impl ColorMapper for MapBgrGray {
     }
 }
 
+pub struct MapGrayGrayf;
+impl ColorMapper for MapGrayGrayf {
+    type SrcType = Gray<u8>;
+    type DstType = Gray<f32>;
+
+    #[inline(always)]
+    fn to(src: &Self::SrcType) -> Self::DstType {
+        Gray([src[0].to_f32().unwrap()])
+    }
+}
+
 pub fn convert<M>(src: &Image<M::SrcType>) -> Image<M::DstType> 
     where M: ColorMapper {
     let mut dst = Image::new(src.width(), src.height());
@@ -71,6 +84,53 @@ pub fn convert<M>(src: &Image<M::SrcType>) -> Image<M::DstType>
         }
     }
     dst
+}
+
+pub fn split<T, U>(src: &Image<T>) -> Vec<Image<Gray<U>>> 
+    where T: Pixel,
+          U: Primitive,
+          T: Index<usize, Output=U>
+{
+    let mut out = Vec::with_capacity(src.channels() as usize);
+    for _ in 0..src.channels() {
+        out.push(Image::<Gray<U>>::new(src.width(), src.height()));
+    }
+    // not the most efficiet way, but saving all out row ptr
+    // will violate the borrow checker
+    for y in 0..src.height() {
+        let psrc = src.row(y);
+        for c in 0..src.channels() as usize {
+            let pdst = out[c].row_mut(y);
+            for x in 0..src.width() as usize {
+                pdst[x][0] = psrc[x][c];
+            }
+        }
+    }
+    out
+}
+
+pub fn merge<P, T>(src: &Vec<Image<Gray<P>>>) -> Image<T>
+    where P: Primitive,
+          T: Pixel,
+          T: IndexMut<usize, Output=P>
+{
+    assert_eq!(T::channels() as usize, src.len());
+    let src0 = &src[0];
+    for i in src.iter() {
+        assert_eq!(i.width(), src0.width());
+        assert_eq!(i.height(), src0.height());
+    }
+    let mut out = Image::<T>::new(src0.width(), src0.height());
+    for y in 0..src0.height() {
+        let pdst = out.row_mut(y);
+        for c in 0..T::channels() as usize {
+            let psrc = src[c].row(y);
+            for x in 0..src0.width() as usize {
+                pdst[x][c] = psrc[x][0];
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -89,10 +149,10 @@ mod test {
             r[3] = Bgra([255, 255, 255, 255]);
         }
         let dst = convert::<MapBgraGray>(&src);
-        assert_eq!(*dst.pixel_at(0, 0), Gray([27]));
-        assert_eq!(*dst.pixel_at(1, 0), Gray([150]));
-        assert_eq!(*dst.pixel_at(2, 0), Gray([76]));
-        assert_eq!(*dst.pixel_at(3, 0), Gray([255]));
+        assert_eq!(dst[(0, 0)], Gray([27]));
+        assert_eq!(dst[(1, 0)], Gray([150]));
+        assert_eq!(dst[(2, 0)], Gray([76]));
+        assert_eq!(dst[(3, 0)], Gray([255]));
     }
 
     #[test]
@@ -100,6 +160,17 @@ mod test {
         let mut src = ImageBgra::new(2000,1000);
         src.fill(&Bgra([100,100,100,255]));
         let out = convert::<MapBgraGray>(&src);
+    }
+
+    #[test]
+    fn test_split_and_merge() {
+        let mut src = ImageBgra::new(20,10);
+        src.fill(&Bgra([100,100,100,255]));
+        let t = split(&src);
+        let out: ImageBgra = merge(&t);
+        for (x, y, p) in out.iter() {
+            assert_eq!(*p, src[(x, y)]);
+        }
     }
 }
 
