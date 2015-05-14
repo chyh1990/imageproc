@@ -57,8 +57,6 @@ pub trait Pixel: Copy + Clone + Index<usize> {
 
     fn zero() -> Self;
 
-    fn alpha() -> isize;
-
     /// Returns the number of channels of this pixel type.
     fn channels() -> u8;
 
@@ -80,7 +78,6 @@ macro_rules! define_colors {
     {$(
         $ident:ident,
         $channels: expr,
-        $alpha: expr,
         $interpretation: expr,
         #[$doc:meta];
     )*} => {
@@ -120,12 +117,6 @@ impl<T: Primitive> Pixel for $ident<T> {
     fn bits_per_pixel() -> u8 {
         8 * $channels
     }
-
-    #[inline]
-    fn alpha() -> isize {
-        $alpha
-    }
-
 
     #[inline]
     fn raw(&self) -> &[T] {
@@ -262,11 +253,54 @@ impl<T: Primitive, U: Primitive> Mul<U> for $ident<T> {
 }
 
 define_colors! {
-    Bgr, 3, -1, "BGR", #[doc = "RGB colors"];
-    Gray, 1, -1, "Y", #[doc = "Grayscale colors"];
-    Bgra, 4, 3, "BGRA", #[doc = "BGR colors + alpha channel"];
-    Rgba, 4, 3, "RGBA", #[doc = "RGB colors + alpha channel"];
+    Bgr, 3, "BGR", #[doc = "RGB colors"];
+    Gray, 1, "Y", #[doc = "Grayscale colors"];
+    Bgra, 4, "BGRA", #[doc = "BGR colors + alpha channel"];
+    Rgba, 4, "RGBA", #[doc = "RGB colors + alpha channel"];
 }
+
+pub trait AlphaPixel: Pixel {
+    fn alpha_index() -> usize;
+}
+
+macro_rules! define_alpha(
+    ($t:ident, $idx:expr) => (
+impl<T: Primitive> AlphaPixel for $t<T> {
+    fn alpha_index() -> usize {
+        $idx
+    }
+}
+    );
+);
+
+define_alpha!(Bgra, 3);
+define_alpha!(Rgba, 3);
+
+pub trait RGBPixel: Pixel {
+    fn red_index() -> usize;
+    fn green_index() -> usize;
+    fn blue_index() -> usize;
+}
+
+macro_rules! define_rgb(
+    ($t:ident, $r:expr, $g:expr, $b:expr) => (
+impl<T: Primitive> RGBPixel for $t<T> {
+    fn blue_index() -> usize {
+        $b
+    }
+    fn green_index() -> usize {
+        $g
+    }
+    fn red_index() -> usize {
+        $r
+    }
+}
+    );
+);
+
+define_rgb!(Bgr, 2, 1, 0);
+define_rgb!(Bgra, 2, 1, 0);
+define_rgb!(Rgba, 0, 1, 2);
 
 macro_rules! define_saturating(
     ($t:ident) => (
@@ -389,16 +423,6 @@ impl<T: Pixel> Image<T> {
     }
 
     #[inline]
-    fn alpha(&self) -> isize {
-        T::alpha()
-    }
-
-    #[inline]
-    fn has_alpha() -> bool {
-        T::alpha() >= 0
-    }
-
-    #[inline]
     pub fn bytes_per_row(&self) -> usize {
         (self.stride as usize) * (T::bits_per_pixel() / 8) as usize
     }
@@ -428,13 +452,6 @@ impl<T: Pixel> Image<T> {
         }
     }
 
-    pub fn set_alpha(&mut self) {
-        if Image::<T>::has_alpha() {
-            self.fill_channel(T::alpha() as usize,
-                T::Subpixel::max_value());
-        }
-    }
-
     pub fn zero(&mut self) {
         self.fill(&T::zero())
     }
@@ -457,6 +474,17 @@ impl<T: Pixel> Image<T> {
     }
     //pub fn crop(&self, rect: &Rect) -> Result<Image<T>, ImageError> {
     //}
+}
+
+pub trait AlphaImage {
+    fn set_alpha(&mut self);
+}
+
+impl<T: AlphaPixel> AlphaImage for Image<T> {
+    fn set_alpha(&mut self) {
+        self.fill_channel(T::alpha_index(),
+            T::Subpixel::max_value());
+    }
 }
 
 impl<T: Pixel> Drop for Image<T> {
