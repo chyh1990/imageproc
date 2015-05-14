@@ -2,6 +2,11 @@ use image::*;
 use math::utils::*;
 use math::affine::Affine2D;
 
+pub enum InterplateType {
+    Nearest,
+    Bilinear
+}
+
 pub fn resize_nearest<T: Pixel>(src: &Image<T>, width: u32, height: u32) -> Image<T> {
     let mut dst = Image::new(width, height);
     let yscale: f32 = src.height() as f32 / height as f32;
@@ -66,7 +71,14 @@ pub fn resize_bilinear<T: Pixel>(src: &Image<T>, width: u32, height: u32) -> Ima
     dst
 }
 
-pub fn warp_perspective<T: Pixel>(src: &Image<T>, width: u32, height: u32, affine :&Affine2D, interp :bool) -> Image<T> {
+pub fn resize<T: Pixel>(src: &Image<T>, width: u32, height: u32, interp: InterplateType) -> Image<T> {
+    match interp {
+        InterplateType::Nearest => resize_nearest(src, width, height),
+        InterplateType::Bilinear => resize_bilinear(src, width, height)
+    }
+}
+
+pub fn warp_perspective<T: Pixel>(src: &Image<T>, width: u32, height: u32, affine :&Affine2D, interp :InterplateType) -> Image<T> {
     let mut dst: Image<T> = Image::new(width, height);
     for h in 0..height {
         let pdst = dst.row_mut(h);
@@ -74,15 +86,28 @@ pub fn warp_perspective<T: Pixel>(src: &Image<T>, width: u32, height: u32, affin
             let coord = affine.apply_inv([w as f32, h as f32, 1f32]);
             let sx = coord[0] / coord[2];
             let sy = coord[1] / coord[2];
-            if !interp {
-                let ix = sx.round() as i32;
-                let iy = sy.round() as i32;
-                if ix >= 0 && ix < src.width() as i32 
-                    && iy >= 0 && iy < src.height() as i32 {
-                    pdst[w as usize] = src[(ix as u32, iy as u32)];
+            match interp {
+                InterplateType::Nearest => {
+                    let ix = sx.round() as i32;
+                    let iy = sy.round() as i32;
+                    if ix >= 0 && ix < src.width() as i32 
+                        && iy >= 0 && iy < src.height() as i32 {
+                            pdst[w as usize] = src[(ix as u32, iy as u32)];
+                        }
+                },
+                InterplateType::Bilinear => {
+                    let u = sx.ceil() - sx;
+                    let v = sy.ceil() - sy;
+                    let x0 = clip(sx.floor() as i32, 0, src.width() as i32 - 1) as u32;
+                    let y0 = clip(sy.floor() as i32, 0, src.height() as i32 -1) as u32;
+                    let x1 = clip(sx.ceil() as i32, 0, src.width() as i32 -1) as u32;
+                    let y1 = clip(sy.ceil() as i32, 0, src.height() as i32 - 1) as u32;
+                    pdst[w as usize] = src[(x0, y0)].blend4(
+                        src[(x1, y0)],
+                        src[(x0, y1)],
+                        src[(x1, y1)],
+                        u, v);
                 }
-            } else {
-                unimplemented!();
             }
         }
     }
@@ -171,13 +196,17 @@ mod test {
         let dst = vec![Pointf::new(0f32, 0f32), Pointf::new(1f32, 1f32)];
 
         let aff = Affine2D::nonreflect_similarity_from_points(&src, &dst).unwrap();
-        let out = warp_perspective(&img, 200, 200, &aff, false);
+        let out = warp_perspective(&img, 200, 200, &aff, InterplateType::Nearest);
         let target = Path::new("/tmp/test-affine-out1.jpg");
+        FreeImageIO::save(&target, &out).unwrap();
+
+        let out = warp_perspective(&img, 300, 300, &aff, InterplateType::Bilinear);
+        let target = Path::new("/tmp/test-affine-out2.jpg");
         FreeImageIO::save(&target, &out).unwrap();
     }
 
     #[test]
-    fn test_rotate() {
+    fn test_flip() {
         let path = Path::new("./tests/cat.jpg");
         let img: ImageBgra = FreeImageIO::from_path(&path).unwrap();
 

@@ -366,6 +366,7 @@ impl<T: Pixel> Image<T> {
                 true => {
                 let data: Vec<T> = Vec::with_capacity((height * width) as usize);
                 // TODO(chenyh): copy data
+                unimplemented!();
                 Ok(Image {
                     w: width,
                     h: height,
