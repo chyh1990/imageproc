@@ -50,6 +50,8 @@ impl<T: Primitive> Color<T> {
     }
 }
 
+pub const MAX_CHANNEL_COUNT: usize = 4;
+
 /// A pixel object is usually not used standalone but as a view into an image buffer.
 pub trait Pixel: Copy + Clone + Index<usize> {
     /// The underlying subpixel type.
@@ -57,8 +59,10 @@ pub trait Pixel: Copy + Clone + Index<usize> {
 
     fn zero() -> Self;
 
+    fn from_raw(data: &[Self::Subpixel]) -> Self;
+
     /// Returns the number of channels of this pixel type.
-    fn channels() -> u8;
+    fn channels() -> usize;
 
     /// Returns the bits per pixel
     fn bits_per_pixel() -> u8;
@@ -109,7 +113,14 @@ impl<T: Primitive> Pixel for $ident<T> {
     }
 
     #[inline]
-    fn channels() -> u8 {
+    fn from_raw(data: &[T]) -> Self {
+        let mut t = $ident::zero();
+        for i in 0..$channels { t.data[i] = data[i]; }
+        t
+    }
+
+    #[inline]
+    fn channels() -> usize {
         $channels
     }
 
@@ -414,7 +425,7 @@ impl<T: Pixel> Image<T> {
     }
 
     #[inline]
-    pub fn channels(&self) -> u8 {
+    pub fn channels(&self) -> usize {
         T::channels()
     }
 

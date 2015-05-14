@@ -1,6 +1,10 @@
 use image::*;
+use num::NumCast;
+use std::ops::Index;
+use num::traits::Bounded;
 use math::utils::*;
 use math::affine::Affine2D;
+use num::traits::ToPrimitive;
 
 pub enum InterplateType {
     Nearest,
@@ -134,31 +138,119 @@ pub fn flip_horizontal<T: Pixel>(src: &Image<T>) -> Image<T> {
     dst
 }
 
-#[derive(Debug, Clone)]
-pub enum RotateType{
-    CW_0,
-    CW_90,
-    CW_180,
-    CW_270
+pub fn min<T, U>(src: &Image<T>) -> U
+    where T: Pixel,
+          U: Pixel,
+          T: Index<usize, Output=U::Subpixel>
+{
+    let mut t = [U::Subpixel::max_value(); MAX_CHANNEL_COUNT];
+    for (_, _, p) in src.iter() {
+        for c in 0..T::channels() {
+            if t[c] > p[c] {
+                t[c] = p[c];
+            }
+        }
+    }
+    U::from_raw(&t)
 }
 
-fn rotate_cw90<T: Pixel>(src: &Image<T>) -> Image<T> {
-    let mut dst = Image::new(src.height(), src.width());
-    for h in 0..src.height() {
-        let psrc = dst.row(h);
-        for w in 0..src.width() {
-            unimplemented!();
+pub fn max<T, U>(src: &Image<T>) -> U
+    where T: Pixel,
+          U: Pixel,
+          T: Index<usize, Output=U::Subpixel>
+{
+    let mut t = [U::Subpixel::min_value(); MAX_CHANNEL_COUNT];
+    for (_, _, p) in src.iter() {
+        for c in 0..T::channels() {
+            if t[c] < p[c] {
+                t[c] = p[c];
+            }
+        }
+    }
+    U::from_raw(&t)
+}
+
+pub fn normalize<U, V, M>(src: &Image<U>, alpha: f32, beta: f32) -> Image<V> 
+    where U: Pixel,
+          V: Pixel,
+          M: Pixel,
+          U: Index<usize, Output=M::Subpixel>
+{
+    let mut dst = Image::<V>::new(src.width(), src.height());
+    let mut mins = [0f32; MAX_CHANNEL_COUNT];
+    let mut maxs = [0f32; MAX_CHANNEL_COUNT];
+    let min_p: M = min(&src);
+    let max_p: M = max(&src);
+    let s = beta - alpha;
+    for c in 0..U::channels() {
+        mins[c] = min_p.raw()[c].to_f32().unwrap();
+        maxs[c] = max_p.raw()[c].to_f32().unwrap();
+    }
+    for ((_, _, p), (_, _, q)) in dst.iter_mut().zip(src.iter()) {
+        for c in 0..U::channels() {
+            let d = maxs[c] - mins[c];
+            let t = (q.raw()[c].to_f32().unwrap() - mins[c]) / d * s + alpha;
+            p.raw_mut()[c] = NumCast::from(t).unwrap();
         }
     }
     dst
 }
 
-
-//fn rotate(src: &Image<T>, rtype: RotateType) -> Image<T> {
-//    match rtype {
-//        CW_0 => 
-//    }
+//pub fn max<T: Pixel>(src: &Image<T>) -> (u32, u32, T) {
 //}
+
+#[derive(Debug, Clone)]
+pub enum RotateType{
+    Cw0,
+    Cw90,
+    Cw180,
+    Cw270
+}
+
+pub fn rotate_cw90<T: Pixel>(src: &Image<T>) -> Image<T> {
+    let mut dst = Image::new(src.height(), src.width());
+    for h in 0..src.height() {
+        let psrc = src.row(h);
+        let k = (src.height() - h - 1) as usize;
+        for w in 0..src.width() {
+            dst.row_mut(w)[k] = psrc[w as usize];
+        }
+    }
+    dst
+}
+
+pub fn rotate_cw180<T: Pixel>(src: &Image<T>) -> Image<T> {
+    let mut dst = Image::new(src.width(), src.height());
+    for h in 0..src.height() {
+        let psrc = src.row(h);
+        let pdst = dst.row_mut(src.height() - h - 1);
+        for w in 0..src.width() as usize {
+            pdst[w] = psrc[src.width() as usize - w - 1];
+        }
+    }
+
+    dst
+}
+
+pub fn rotate_cw270<T: Pixel>(src: &Image<T>) -> Image<T> {
+    let mut dst = Image::new(src.height(), src.width());
+    for h in 0..src.height() {
+        let psrc = src.row(h);
+        for w in 0..src.width() {
+            dst.row_mut(src.width() - w - 1)[h as usize] = psrc[w as usize];
+        }
+    }
+    dst
+}
+
+fn rotate<T: Pixel>(src: &Image<T>, rtype: RotateType) -> Image<T> {
+    match rtype {
+        RotateType::Cw0 => src.clone(),
+        RotateType::Cw90 => rotate_cw90(src),
+        RotateType::Cw180 => rotate_cw180(src),
+        RotateType::Cw270 => rotate_cw270(src)
+    }
+}
 
 #[cfg(test)]
 mod test {
@@ -211,11 +303,29 @@ mod test {
         let img: ImageBgra = FreeImageIO::from_path(&path).unwrap();
 
         let out = flip_vertical(&img);
-        let target = Path::new("/tmp/test-rotate-out1.jpg");
+        let target = Path::new("/tmp/test-flip-out1.jpg");
         FreeImageIO::save(&target, &out).unwrap();
 
         let out = flip_horizontal(&img);
+        let target = Path::new("/tmp/test-flip-out2.jpg");
+        FreeImageIO::save(&target, &out).unwrap();
+    }
+
+    #[test]
+    fn test_rotate() {
+        let path = Path::new("./tests/cat.jpg");
+        let img: ImageBgra = FreeImageIO::from_path(&path).unwrap();
+
+        let out = rotate_cw90(&img);
+        let target = Path::new("/tmp/test-rotate-out1.jpg");
+        FreeImageIO::save(&target, &out).unwrap();
+
+        let out = rotate_cw180(&img);
         let target = Path::new("/tmp/test-rotate-out2.jpg");
+        FreeImageIO::save(&target, &out).unwrap();
+
+        let out = rotate_cw270(&img);
+        let target = Path::new("/tmp/test-rotate-out3.jpg");
         FreeImageIO::save(&target, &out).unwrap();
     }
 }

@@ -57,7 +57,7 @@ pub fn conv2d_sep<T: Pixel>(src: &Image<T>, kernelx: &[f32], kernely: &[f32]) ->
         }
         for x in 0..width {
             // XXX max channel?
-            let mut px = [0f32; 4];
+            let mut px = [0f32; MAX_CHANNEL_COUNT];
             for i in 0..kernelx.len() {
                 let tx = (x as usize + hkxw - kernelx.len() / 2 + i) * channels;
                 for c in 0..channels {
