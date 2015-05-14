@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 extern crate time;
 extern crate imageproc;
 
@@ -14,8 +16,7 @@ use imageproc::imageio::{ImageIO, FreeImageIO};
 fn main() {
     println!("start perf...");
 
-    let mut src = ImageBgra::new(200,100);
-
+    let src = ImageBgra::new(200,100);
     let start = PreciseTime::now();
 
     for _ in 0..1000 {

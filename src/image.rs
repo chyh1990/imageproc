@@ -1,12 +1,10 @@
 use std::slice;
 use num::NumCast;
 use num::traits::{Saturating, Bounded};
-use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 use std::ops::{Add, Sub, Mul};
 
 use traits::Primitive;
-use geo::Rect;
 
 #[derive(Debug)]
 pub enum ImageError {
@@ -368,27 +366,6 @@ impl<T: Pixel> Image<T> {
         }
     }
 
-    pub fn from_raw(data: &[u8], width: u32, height: u32, stride: u32)
-        -> Result<Image<T>, ImageError> {
-            if stride < width {
-                return Err(ImageError::OutOfMemoryError);
-            }
-            match (height * stride * (T::bits_per_pixel() as u32 / 8) ) as usize <= data.len() {
-                true => {
-                let data: Vec<T> = Vec::with_capacity((height * width) as usize);
-                // TODO(chenyh): copy data
-                unimplemented!();
-                Ok(Image {
-                    w: width,
-                    h: height,
-                    stride: width,
-                    data: data
-                })
-                },
-                false => Err(ImageError::OutOfMemoryError)
-            }
-    }
-
     #[inline]
     pub fn width(&self) -> u32 { self.w }
 
@@ -641,11 +618,11 @@ mod test {
     #[test]
     fn test_iter() {
         let mut img = ImageBgra::new(10, 5);
-        for (x, y, p) in img.iter_mut() {
+        for (_, _, p) in img.iter_mut() {
             *p = Bgra::<u8>([128, 128, 0, 0]);
         }
 
-        for (x, y, p) in img.iter() {
+        for (_, _, p) in img.iter() {
             assert_eq!(*p, Bgra::<u8>([128, 128, 0, 0]));
         }
     }
@@ -653,7 +630,7 @@ mod test {
     #[test]
     fn test_traits() {
         let mut img = ImageBgra::new(10, 5);
-        for (x, y, p) in img.iter_mut() {
+        for (_, _, p) in img.iter_mut() {
             *p = *p + Bgra::<u8>([128, 128, 0, 0]);
         }
     }

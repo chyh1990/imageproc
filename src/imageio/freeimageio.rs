@@ -158,7 +158,7 @@ unsafe fn to_raw<T: Pixel>(image: &Image<T>) -> *mut c_void {
         let stride_src = image.pitch();
         let src = image.raw();
         let psrc = src.as_ptr() as *const u8;
-        let dptr = unsafe { FreeImage_GetBits(p) };
+        let dptr = FreeImage_GetBits(p);
         if dptr.is_null() {
             panic!("No image data!");
         }
@@ -178,19 +178,17 @@ unsafe fn save_raw_to_file(p: *mut c_void, path: &Path, src_bits: u8, format: Im
     let code;
     let c_path = CString::new(path.to_str().unwrap()).unwrap();
     assert!(src_bits == 8 || src_bits == 24 || src_bits == 32);
-    unsafe { 
-        if format != ImageFormat::FIF_JPEG || src_bits != 32 {
-            code = FreeImage_Save(format, p, c_path.as_ptr(), 0);
-            FreeImage_Unload(p);
-        } else {
-            let np = FreeImage_ConvertTo24Bits(p);
-            FreeImage_Unload(p);
-            if np.is_null() {
-                return 0;
-            }
-            code = FreeImage_Save(format, np, c_path.as_ptr(), 0);
-            FreeImage_Unload(np);
+    if format != ImageFormat::FIF_JPEG || src_bits != 32 {
+        code = FreeImage_Save(format, p, c_path.as_ptr(), 0);
+        FreeImage_Unload(p);
+    } else {
+        let np = FreeImage_ConvertTo24Bits(p);
+        FreeImage_Unload(p);
+        if np.is_null() {
+            return 0;
         }
+        code = FreeImage_Save(format, np, c_path.as_ptr(), 0);
+        FreeImage_Unload(np);
     }
     code
 }

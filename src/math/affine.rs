@@ -89,11 +89,6 @@ impl Affine2D {
         match Affine2D::solve_affine(m, b) {
             Some(x) => {
                 let t: Mat3<f32> = Mat3::new(
-                    x[0], -x[1], 0f32,
-                    x[1],  x[0], 0f32,
-                    x[2],  x[3], 1f32
-                    );
-                let t: Mat3<f32> = Mat3::new(
                     x[0], x[1], x[2],
                     -x[1],x[0], x[3],
                     0f32, 0f32, 1f32

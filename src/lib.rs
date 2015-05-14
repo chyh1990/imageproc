@@ -14,6 +14,8 @@ pub mod geo;
 pub mod math;
 pub mod conv;
 
-#[test]
-fn it_works() {
-}
+pub use imageio::{
+    ImageIO,
+    FreeImageIO
+};
+

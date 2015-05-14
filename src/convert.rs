@@ -159,7 +159,7 @@ mod test {
     fn test_convert() {
         let mut src = ImageBgra::new(2000,1000);
         src.fill(&Bgra([100,100,100,255]));
-        let out = convert::<MapBgraGray>(&src);
+        let _ = convert::<MapBgraGray>(&src);
     }
 
     #[test]
