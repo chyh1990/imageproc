@@ -40,12 +40,12 @@ extern crate imageproc;
 
 use std::path::Path;
 use imageproc::image::*;
-use imageproc::conv::*;
+use imageproc::conv;
 use imageproc::imageio::{ImageIO, FreeImageIO}; 
 
 fn main() {
-	let img: ImageBgra = FreeImageIO::from_path(&Path::new("cat.jpg"));
-	let out: conv::gaussian_blur(&img, 11, 0f32);
+	let img: ImageBgra = FreeImageIO::from_path(&Path::new("cat.jpg")).unwrap();
+	let out = conv::gaussian_blur(&img, 11, 0f32);
 
 	let target = Path::new("out.png");
 	FreeImageIO::save(&target, &out).unwrap();
