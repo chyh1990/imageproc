@@ -243,7 +243,7 @@ pub fn rotate_cw270<T: Pixel>(src: &Image<T>) -> Image<T> {
     dst
 }
 
-fn rotate<T: Pixel>(src: &Image<T>, rtype: RotateType) -> Image<T> {
+pub fn rotate<T: Pixel>(src: &Image<T>, rtype: RotateType) -> Image<T> {
     match rtype {
         RotateType::Cw0 => src.clone(),
         RotateType::Cw90 => rotate_cw90(src),
