@@ -4,6 +4,8 @@
 
 Maintainers: @chyh1990
 
+> Note: this project is under active depvelopment, API may change!
+
 **imageproc** is a advanced image proccessing library for the Rust language in order to provide:
 
 * generic pixel, image, geometry data structure alike OpenCV

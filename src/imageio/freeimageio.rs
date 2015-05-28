@@ -6,7 +6,7 @@ use std::ptr;
 use self::libc::{c_int, c_uint, c_void, c_char, c_uchar};
 use std::sync::{Once, ONCE_INIT};
 
-use imageio::ImageIO;
+use imageio::{ImageIO, ImagePing, ImageInfo};
 use image::{ImageBgra, ImageBgr, ImageGray,
     ImageError, Image, Pixel};
 
@@ -55,6 +55,7 @@ enum ImageFormat {
 }
 
 const JPEG_EXIFROTATE: c_int = 0x0008;
+const FIF_LOAD_NOPIXELS: c_int = 0x8000;
 
 #[link(name = "freeimage", kind = "static")]
 extern {
@@ -115,17 +116,24 @@ unsafe fn from_raw<T: Pixel>(np: *mut c_void) -> Image<T> {
     image
 }
 
-unsafe fn try_load_from_file(path: &Path, bits :u8) -> *mut c_void {
+unsafe fn try_load_from_file(path: &Path, bits :u8, ping: bool)
+    -> *mut c_void {
     let c_path = CString::new(path.to_str().unwrap()).unwrap();
     let format = FreeImage_GetFileType(c_path.as_ptr(), 0);
     if format == ImageFormat::FIF_UNKNOWN {
         return ptr::null_mut();
     }
     let mut flags: c_int = 0;
+    if ping {
+        flags |= FIF_LOAD_NOPIXELS;
+    }
     if format == ImageFormat::FIF_JPEG {
         flags |= JPEG_EXIFROTATE;
     }
     let p = FreeImage_Load(format, c_path.as_ptr(), flags);
+    if ping {
+        return p;
+    }
     let np;
     let old_bpp = FreeImage_GetBPP(p);
     if old_bpp != bits as u32 {
@@ -200,7 +208,7 @@ macro_rules! define_io_for_image(
         impl ImageIO<$itype> for FreeImageIO {
             fn from_path(path: &Path) -> Result<$itype, ImageError> {
                 init();
-                let p = unsafe { try_load_from_file(path, $bits) };
+                let p = unsafe { try_load_from_file(path, $bits, false) };
                 if p.is_null() {
                     Err(ImageError::InvalidImage)
                 } else {
@@ -238,12 +246,36 @@ define_io_for_image!(ImageGray, 8);
 define_io_for_image!(ImageBgr , 24);
 define_io_for_image!(ImageBgra, 32);
 
+impl ImagePing for FreeImageIO {
+    fn ping_from_path(path: &Path) -> Result<ImageInfo, ImageError> {
+        init();
+        let p = unsafe { try_load_from_file(path, 0, true) };
+        if p.is_null() {
+            Err(ImageError::InvalidImage)
+        } else {
+            unsafe {
+                let w = FreeImage_GetWidth(p);
+                let h = FreeImage_GetHeight(p);
+                let bpp = FreeImage_GetBPP(p);
+                let info = ImageInfo {
+                    signature: String::new(),
+                    width: w,
+                    height: h,
+                    bits_per_pixel: bpp,
+                };
+                FreeImage_Unload(p);
+                Ok(info)
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::path::Path;
     use convert;
     use image::*;
-    use imageio::ImageIO;
+    use imageio::{ImageIO, ImagePing, ImageInfo};
     use imageio::FreeImageIO;
 
     #[test]
@@ -266,6 +298,14 @@ mod test {
         assert_eq!(img.height(), 120);
         assert_eq!(img.bits_per_pixel(), 8);
         assert_eq!(img.channels(), 1);
+    }
+    #[test]
+    fn test_ping() {
+        let path = Path::new("./tests/cat.jpg");
+        let img: ImageInfo = FreeImageIO::ping_from_path(&path).unwrap();
+        assert_eq!(img.width, 150);
+        assert_eq!(img.height, 120);
+        assert_eq!(img.bits_per_pixel, 24);
     }
 
     #[test]
