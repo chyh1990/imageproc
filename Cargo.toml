@@ -8,5 +8,5 @@ build = "build.rs"
 num  = "*"
 time = "*"
 libc  = "*"
-nalgebra = "0.2.13"
+nalgebra = "*"
 
