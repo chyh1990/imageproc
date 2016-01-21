@@ -94,9 +94,29 @@ fn gaussian_kernel(w: usize, sigma: f32) -> Vec<f32> {
     k
 }
 
+fn sobel_kernel(horizontal: bool) -> Vec<f32> {
+    let mut k = vec![0f32; 9];
+    if horizontal {
+        k[0] = -1.0; k[1] =  0.0; k[2] =  1.0;
+        k[3] = -2.0; k[4] =  0.0; k[5] =  2.0;
+        k[6] = -1.0; k[7] =  0.0; k[8] =  1.0;
+    } else {
+        k[0] = -1.0; k[1] = -2.0; k[2] = -1.0;
+        k[3] =  0.0; k[4] =  0.0; k[5] =  0.0;
+        k[6] =  1.0; k[7] =  2.0; k[8] =  1.0;
+    }
+    
+    k
+}
+
 pub fn gaussian_blur<T: Pixel>(src: &Image<T>, kernel_width :usize, sigma: f32) -> Image<T> {
     assert!(kernel_width >= 1);
     let k = gaussian_kernel(kernel_width, sigma);
+    conv2d_sep(src, &k, &k)
+}
+
+pub fn sobel<T: Pixel>(src: &Image<T>, horizontal: bool) -> Image<T> {
+    let k = sobel_kernel(horizontal);
     conv2d_sep(src, &k, &k)
 }
 
